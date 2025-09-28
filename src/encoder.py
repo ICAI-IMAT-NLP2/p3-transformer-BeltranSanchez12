@@ -27,10 +27,14 @@ class TransformerEncoderLayer(nn.Module):
 
     def __init__(self, d_model: int, num_attention_heads: int, intermediate_size: int):
         super(TransformerEncoderLayer, self).__init__()
-        self.layer_norm_1 = None
-        self.layer_norm_2 = None
-        self.attention = None
-        self.feed_forward = None
+        self.layer_norm_1 = nn.LayerNorm(d_model)
+        self.layer_norm_2 = nn.LayerNorm(d_model)
+        self.attention = MultiHeadAttention(d_model, num_attention_heads)
+        self.feed_forward = nn.Sequential(
+            nn.Linear(d_model, intermediate_size),
+            nn.ReLU(),
+            nn.Linear(intermediate_size, d_model),
+        )
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """Forward pass through the Transformer encoder layer.
@@ -43,13 +47,17 @@ class TransformerEncoderLayer(nn.Module):
             torch.Tensor: Output tensor of shape (batch_size, seq_len, d_model).
         """
         # Apply layer normalization and then apply multi-head attention
-        hidden_state = None
-        x = None
-        
+        norm_x = self.layer_norm_1(x)
+        attn_output  = self.attention(norm_x, norm_x, norm_x, mask)
+        x = x + attn_output
+
         # Apply layer normalization and then apply feed-forward network
-        x = None
-        
+        norm_x = self.layer_norm_2(x)
+        ff_outp = self.feed_forward(norm_x)
+        x = x + ff_outp
+
         return x
+
     
 class TransformerEncoder(nn.Module):
     """Transformer Encoder.
@@ -74,8 +82,13 @@ class TransformerEncoder(nn.Module):
                 num_attention_heads: int, intermediate_size: int, num_hidden_layers: int
                 ):
         super(TransformerEncoder, self).__init__()
-        self.embeddings = None
-        self.layers = None
+        self.max_position_embeddings = max_position_embeddings
+        self.vocab_size = vocab_size
+        self.d_model = d_model
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.embeddings = Embeddings(vocab_size, max_position_embeddings, d_model)
+        self.layers = nn.ModuleList([TransformerEncoderLayer(d_model, num_attention_heads, intermediate_size) for i in range(num_hidden_layers)])
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """Forward pass through the Transformer encoder.
@@ -88,8 +101,7 @@ class TransformerEncoder(nn.Module):
             torch.Tensor: Output tensor of shape (batch_size, seq_len, d_model).
         """
         # Apply embeddings layer
-        x = None
-
+        x = self.embeddings(x)
         for layer in self.layers:
             x = layer(x, mask)
         return x
